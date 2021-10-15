@@ -1,6 +1,8 @@
 import os
 from collections import defaultdict
+from datetime import datetime
 
+import ipywidgets
 import pandas as pd
 import pydeck as pdk
 
@@ -48,7 +50,7 @@ def group_data_by_reported_date(raw_data):
     all_dates = set(raw_data["Case_Reported_Date"].values)
 
     dict_by_date = {
-        date: raw_data.loc[raw_data["Case_Reported_Date"] == date]
+        datetime.strptime(date, '%Y-%m-%d'): raw_data.loc[raw_data["Case_Reported_Date"] == date]
         for date in all_dates
     }
 
@@ -79,12 +81,13 @@ phu_lat_lon_df = get_phu_coordinates_df(phu_lat_lon_mapping)
 group_by_date_df = group_data_by_reported_date(data_df)
 count_by_phu = group_data_by_phu(group_by_date_df, phu_lat_lon_mapping)
 
+
 view = pdk.data_utils.compute_view(phu_lat_lon_df[["lon", "lat"]])
 view.zoom = 6
 
 cases = pdk.Layer(
     "HeatmapLayer",
-    data=count_by_phu["2020-05-05"],
+    data=count_by_phu[datetime.strptime("2020-01-23", '%Y-%m-%d')],
     opacity=0.9,
     get_position=["lon", "lat"],
     aggregation=pdk.types.String("MEAN"),
@@ -97,5 +100,32 @@ r = pdk.Deck(
     layers=[cases],
     initial_view_state=view,
 )
+
+# Set up widget
+
+time_range_epoch = sorted([el.timestamp() for el in list(count_by_phu.keys())])
+slider = ipywidgets.IntSlider(
+    value=min(time_range_epoch),
+    min=min(time_range_epoch),
+    max=max(time_range_epoch),
+    step=86400
+)
+play = ipywidgets.Play(
+    value=min(time_range_epoch),
+    min=min(time_range_epoch),
+    max=max(time_range_epoch),
+    step=86400
+)
+ipywidgets.jslink((play, 'value'), (slider, 'value'))
+layout = ipywidgets.HBox([slider, play])
+
+
+def update_map(epoch_date):
+    cases.data = count_by_phu[str(datetime.fromtimestamp(epoch_date).date())]
+    return r.update()
+
+
+interact = ipywidgets.interactive_output(update_map, {"epoch_date": slider})
+# display(layout, interact)
 
 r.to_html("heatmap_layer.html")
