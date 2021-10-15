@@ -33,6 +33,17 @@ def get_phu_coordinates(raw_data):
     return phu_coordinates
 
 
+def get_phu_coordinates_df(mapping):
+    all_phu_list = list(mapping.keys())
+    return pd.DataFrame(
+        data={
+            "phu": all_phu_list,
+            "lat": [mapping[phu]["lat"] for phu in all_phu_list],
+            "lon": [mapping[phu]["lon"] for phu in all_phu_list],
+        }
+    )
+
+
 def group_data_by_reported_date(raw_data):
     all_dates = set(raw_data["Case_Reported_Date"].values)
 
@@ -64,38 +75,27 @@ def group_data_by_phu(raw_data, phu_lat_lon):
 data_df = pd.read_csv(DATA_FP)
 clean_data(data_df)
 phu_lat_lon_mapping = get_phu_coordinates(data_df)
+phu_lat_lon_df = get_phu_coordinates_df(phu_lat_lon_mapping)
 group_by_date_df = group_data_by_reported_date(data_df)
 count_by_phu = group_data_by_phu(group_by_date_df, phu_lat_lon_mapping)
 
-COLOR_BREWER_BLUE_SCALE = [
-    [240, 249, 232],
-    [204, 235, 197],
-    [168, 221, 181],
-    [123, 204, 196],
-    [67, 162, 202],
-    [8, 104, 172],
-]
-
-view = pdk.data_utils.compute_view(data_df[["Reporting_PHU_Longitude", "Reporting_PHU_Latitude"]])
+view = pdk.data_utils.compute_view(phu_lat_lon_df[["lon", "lat"]])
 view.zoom = 6
 
 cases = pdk.Layer(
     "HeatmapLayer",
-    data=data_df,
+    data=count_by_phu["2020-05-05"],
     opacity=0.9,
-    get_position=["Reporting_PHU_Longitude", "Reporting_PHU_Latitude"],
+    get_position=["lon", "lat"],
     aggregation=pdk.types.String("MEAN"),
-    color_range=COLOR_BREWER_BLUE_SCALE,
     threshold=1,
-    get_weight="weight",
+    get_weight="count",
     pickable=True,
 )
 
 r = pdk.Deck(
     layers=[cases],
     initial_view_state=view,
-    map_provider="mapbox",
-    map_style=pdk.map_styles.SATELLITE,
 )
 
 r.to_html("heatmap_layer.html")
